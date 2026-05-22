@@ -218,6 +218,7 @@ async function ensureLocalStream(){
 
 // create peer
 function createPeer(initiator, remoteId){
+  hangBtn.disabled = false; // Habilitar botón de colgar inmediatamente
   peer = new SimplePeer({
     initiator,
     trickle: false,
