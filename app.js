@@ -78,6 +78,7 @@ const adminPanel = document.getElementById('adminPanel');
 const createUserForm = document.getElementById('createUserForm');
 
 const userList = document.getElementById('userList');
+const globalUserList = document.getElementById('globalUserList');
 // Solicitar lista de usuarios al conectar si es admin
 function requestUserList() {
   if (isAdmin) {
@@ -151,6 +152,69 @@ socket.on('admin-user-list', (users) => {
       li.appendChild(btn);
     }
     userList.appendChild(li);
+  });
+});
+
+// Recibe y muestra la lista global de usuarios y sus estados (para todos)
+socket.on('user-list-update', (allUsers) => {
+  if (!globalUserList) return;
+  globalUserList.innerHTML = '';
+
+  allUsers.forEach(u => {
+    const li = document.createElement('li');
+    li.style.display = 'flex';
+    li.style.alignItems = 'center';
+    li.style.justifyContent = 'space-between';
+    li.style.padding = '8px 12px';
+    li.style.background = '#f7f7f7';
+    li.style.borderRadius = '8px';
+    li.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+    li.style.color = '#333';
+
+    // Indicador de estado (online/offline)
+    const statusDot = u.isOnline ? '🟢' : '⚪';
+    const statusText = u.isOnline ? 'En línea' : 'Desconectado';
+    
+    // Nombre de usuario e info
+    const infoSpan = document.createElement('span');
+    infoSpan.innerHTML = `${statusDot} <strong style="margin-left: 6px;">${u.username}</strong> ${u.isAdmin ? ' <small style="color:#075e54; font-weight:bold;">(admin)</small>' : ''}`;
+    infoSpan.title = statusText;
+    li.appendChild(infoSpan);
+
+    // Botón de acción (Llamar) si está conectado y no es el propio usuario
+    if (u.isOnline && u.username !== currentUser) {
+      const callBtn = document.createElement('button');
+      callBtn.textContent = 'Llamar';
+      callBtn.style.background = '#25d366';
+      callBtn.style.color = '#fff';
+      callBtn.style.border = 'none';
+      callBtn.style.borderRadius = '16px';
+      callBtn.style.padding = '4px 12px';
+      callBtn.style.cursor = 'pointer';
+      callBtn.style.fontWeight = 'bold';
+      
+      callBtn.onclick = () => {
+        targetIdInput.value = u.socketId;
+        log(`Iniciando llamada directa a ${u.username}...`);
+        document.getElementById('callBtn').click();
+      };
+      li.appendChild(callBtn);
+    } else if (u.username === currentUser) {
+      const selfSpan = document.createElement('span');
+      selfSpan.textContent = 'Tú';
+      selfSpan.style.color = '#6a7175';
+      selfSpan.style.fontSize = '0.85rem';
+      selfSpan.style.fontWeight = 'bold';
+      li.appendChild(selfSpan);
+    } else {
+      const offlineSpan = document.createElement('span');
+      offlineSpan.textContent = 'Offline';
+      offlineSpan.style.color = '#b0bec5';
+      offlineSpan.style.fontSize = '0.85rem';
+      li.appendChild(offlineSpan);
+    }
+
+    globalUserList.appendChild(li);
   });
 });
 

@@ -41,7 +41,11 @@ io.on('connection', (socket) => {
     socket.disconnect();
     return;
   }
+  socket.username = username; // Guardar el username en el socket
   socket.emit('login-result', { ok: true, isAdmin: !!user.isAdmin });
+
+  // Notificar lista de usuarios al conectar
+  broadcastUserList();
 
   // Señalización WebRTC
   socket.on('signal', ({ to, data }) => {
@@ -65,6 +69,7 @@ io.on('connection', (socket) => {
     users.push({ username, password, isAdmin: false });
     socket.emit('admin-create-user-result', { ok: true, msg: 'Usuario creado correctamente.' });
     sendUserList();
+    broadcastUserList();
   });
 
   // Listar usuarios (solo admin)
@@ -91,6 +96,12 @@ io.on('connection', (socket) => {
     users.splice(idx, 1);
     socket.emit('admin-delete-user-result', { ok: true, msg: 'Usuario eliminado.' });
     sendUserList();
+    broadcastUserList();
+  });
+
+  // Manejo de desconexión
+  socket.on('disconnect', () => {
+    broadcastUserList();
   });
 
   // Enviar lista de usuarios a todos los admins conectados
@@ -101,6 +112,31 @@ io.on('connection', (socket) => {
         s.emit('admin-user-list', safeUsers);
       }
     });
+  }
+
+  // Enviar lista global de usuarios (online y offline) a todos los conectados
+  function broadcastUserList() {
+    const onlineUsernames = new Set();
+    io.sockets.sockets.forEach(s => {
+      if (s.username) onlineUsernames.add(s.username);
+    });
+
+    const allUsers = users.map(u => {
+      const isOnline = onlineUsernames.has(u.username);
+      let socketId = null;
+      if (isOnline) {
+        const foundSocket = Array.from(io.sockets.sockets.values()).find(s => s.username === u.username);
+        if (foundSocket) socketId = foundSocket.id;
+      }
+      return {
+        username: u.username,
+        isAdmin: !!u.isAdmin,
+        isOnline: isOnline,
+        socketId: socketId
+      };
+    });
+
+    io.emit('user-list-update', allUsers);
   }
 });
 
