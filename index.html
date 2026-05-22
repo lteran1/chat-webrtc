@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mi Chat WebRTC</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- CDN socket.io-client y simple-peer para evitar build -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+</head>
+<body>
+  <div id="loginModal" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;z-index:1000;">
+    <form id="loginForm" style="background:#fff;padding:32px 24px;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.12);display:flex;flex-direction:column;gap:16px;min-width:320px;">
+      <h2 style="margin:0 0 8px 0;color:#075e54;">Iniciar sesión</h2>
+      <input id="loginUser" placeholder="Usuario" required style="padding:10px;border-radius:8px;border:1px solid #b2dfdb;" />
+      <input id="loginPass" type="password" placeholder="Contraseña" required style="padding:10px;border-radius:8px;border:1px solid #b2dfdb;" />
+      <button type="submit" style="background:#25d366;color:#075e54;border:0;border-radius:24px;padding:10px 0;font-weight:600;cursor:pointer;">Entrar</button>
+      <div id="loginMsg" style="color:#e53935;font-size:0.95rem;"></div>
+    </form>
+  </div>
+  <div class="app" style="display:none;" id="mainApp">
+    <aside class="sidebar">
+      <header class="brand">
+        <h1>MiChat</h1>
+        <div class="me-id" id="myId">ID: —</div>
+      </header>
+
+
+      <!-- Panel de administración para crear usuarios (solo admin) -->
+
+      <div class="admin-panel" id="adminPanel" style="display:none; margin-bottom:16px; background:#fff; color:#222; border-radius:12px; padding:16px;">
+        <h2 style="margin-top:0; font-size:1.1rem; color:#075e54;">Panel de administrador</h2>
+        <form id="createUserForm">
+          <div style="margin-bottom:8px;">
+            <label for="newUsername">Usuario:</label>
+            <input id="newUsername" name="newUsername" required style="margin-left:8px; padding:6px; border-radius:8px; border:1px solid #b2dfdb;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label for="newPassword">Contraseña:</label>
+            <input id="newPassword" name="newPassword" type="password" required style="margin-left:8px; padding:6px; border-radius:8px; border:1px solid #b2dfdb;" />
+          </div>
+          <button type="submit" style="background:#25d366; color:#075e54; border:0; border-radius:24px; padding:8px 18px; font-weight:600; cursor:pointer;">Crear usuario</button>
+        </form>
+        <div id="adminMsg" style="margin-top:8px; font-size:0.95rem;"></div>
+
+        <hr style="margin:16px 0;">
+        <div>
+          <h3 style="font-size:1rem; color:#075e54; margin-bottom:8px;">Usuarios existentes</h3>
+          <ul id="userList" style="list-style:none; padding:0; margin:0;"></ul>
+        </div>
+      </div>
+
+      <div class="contacts">
+        <label for="targetId">Llamar a (ID):</label>
+        <input id="targetId" placeholder="Pega ID del contacto" />
+        <div class="buttons">
+          <button id="callBtn">Llamar</button>
+          <button id="hangBtn" disabled>Colgar</button>
+        </div>
+      </div>
+
+      <div class="messages">
+        <div class="msg-list" id="msgList"></div>
+        <div class="msg-send">
+          <input id="msgInput" placeholder="Escribe un mensaje..." />
+          <button id="sendMsg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#075e54" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="videos">
+        <div class="video-wrap local">
+          <video id="localVideo" autoplay muted playsinline></video>
+          <div class="label">Tú</div>
+        </div>
+        <div class="video-wrap remote">
+          <video id="remoteVideo" autoplay playsinline></video>
+          <div class="label">Remoto</div>
+        </div>
+      </section>
+
+      <section class="log" id="logArea"></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
