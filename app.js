@@ -1,7 +1,7 @@
 // app.js - cliente simple para mensajería y llamadas (usa simple-peer y socket.io-client CDN)
 // Cambia la URL si tu servidor está en otra dirección
 
-const SERVER_URL = 'http://localhost:4000';
+const SERVER_URL = window.location.origin;
 let currentUser = null;
 let isAdmin = false;
 
