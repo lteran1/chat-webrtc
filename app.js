@@ -189,7 +189,11 @@ if (createUserForm) {
 socket.on('signal', async ({ from, data }) => {
   log(`Señal recibida de ${from}`);
   if (!peer) {
-    await ensureLocalStream();
+    try {
+      await ensureLocalStream();
+    } catch (err) {
+      log('Respondiendo llamada en modo solo texto (sin cámara/micrófono)');
+    }
     createPeer(false, from);
   }
   peer.signal(data);
@@ -217,7 +221,17 @@ function createPeer(initiator, remoteId){
   peer = new SimplePeer({
     initiator,
     trickle: false,
-    stream: localStream
+    stream: localStream || undefined,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.services.mozilla.com' }
+      ]
+    }
   });
 
   peer.on('signal', data => {
@@ -264,7 +278,11 @@ function createPeer(initiator, remoteId){
 callBtn.addEventListener('click', async () => {
   const target = targetIdInput.value.trim();
   if (!target) { log('Introduce un ID para llamar'); return; }
-  await ensureLocalStream();
+  try {
+    await ensureLocalStream();
+  } catch (err) {
+    log('Iniciando llamada en modo solo texto (sin cámara/micrófono)');
+  }
   createPeer(true, target);
 });
 
