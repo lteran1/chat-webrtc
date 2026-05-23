@@ -59,6 +59,18 @@
         </ul>
       </div>
 
+      <!-- Contactos guardados -->
+      <div class="user-directory" id="savedContactsPanel" style="margin: 0 12px 16px 12px; background:#fff; color:#222; border-radius:12px; padding:16px;">
+        <h2 style="margin-top:0; font-size:1.1rem; color:#075e54; margin-bottom:12px;">📋 Mis Contactos</h2>
+        <ul id="savedContactsList" style="list-style:none; padding:0; margin:0 0 12px 0;"></ul>
+        <!-- Formulario guardar contacto -->
+        <div id="saveContactForm" style="display:none; border-top:1px solid #e0e0e0; padding-top:10px; margin-top:4px;">
+          <input id="saveContactName" placeholder="Nombre del contacto" style="width:100%;padding:7px;border-radius:8px;border:1px solid #b2dfdb;margin-bottom:6px;box-sizing:border-box;" />
+          <button id="saveContactBtn" style="width:100%;background:#075e54;color:#fff;border:none;border-radius:20px;padding:8px;font-weight:600;cursor:pointer;">💾 Guardar contacto</button>
+          <div id="saveContactMsg" style="font-size:0.88rem;margin-top:6px;color:#6a7175;"></div>
+        </div>
+      </div>
+
       <div class="contacts">
         <label for="targetId">Llamar a (ID):</label>
         <input id="targetId" placeholder="Pega ID del contacto" />

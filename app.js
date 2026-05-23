@@ -54,6 +54,7 @@ loginForm.addEventListener('submit', function(e) {
     showApp();
     checkAdmin();
     requestUserList();
+    initContacts();
     loginForm.reset();
   });
 });
@@ -79,6 +80,61 @@ const createUserForm = document.getElementById('createUserForm');
 
 const userList = document.getElementById('userList');
 const globalUserList = document.getElementById('globalUserList');
+
+// ── Contactos guardados (localStorage) ──────────────────────────────
+function loadContacts() {
+  try { return JSON.parse(localStorage.getItem('contacts') || '[]'); } catch { return []; }
+}
+function saveContact(name, id) {
+  const contacts = loadContacts();
+  if (contacts.find(c => c.id === id)) return false;
+  contacts.push({ name, id });
+  localStorage.setItem('contacts', JSON.stringify(contacts));
+  return true;
+}
+function deleteContact(id) {
+  const contacts = loadContacts().filter(c => c.id !== id);
+  localStorage.setItem('contacts', JSON.stringify(contacts));
+}
+function renderSavedContacts() {
+  const contacts = loadContacts();
+  const list = document.getElementById('savedContactsList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (contacts.length === 0) {
+    list.innerHTML = '<li style="color:#6a7175;font-size:0.9rem;padding:6px 0;">Sin contactos guardados</li>';
+    return;
+  }
+  contacts.forEach(c => {
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f7f7f7;border-radius:8px;gap:6px;margin-bottom:6px;';
+    li.innerHTML = `<span style="font-weight:600;color:#222;">${c.name}</span>`;
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;';
+    const callC = document.createElement('button');
+    callC.textContent = 'Llamar';
+    callC.style.cssText = 'background:#25d366;color:#fff;border:none;border-radius:14px;padding:3px 10px;font-weight:bold;cursor:pointer;font-size:0.85rem;';
+    callC.onclick = () => {
+      targetIdInput.value = c.id;
+      log('Llamando a ' + c.name + '...');
+      document.getElementById('callBtn').click();
+    };
+    const delC = document.createElement('button');
+    delC.textContent = '✕';
+    delC.title = 'Eliminar contacto';
+    delC.style.cssText = 'background:#e53935;color:#fff;border:none;border-radius:14px;padding:3px 8px;cursor:pointer;font-size:0.85rem;';
+    delC.onclick = () => {
+      if (confirm('¿Eliminar el contacto "' + c.name + '"?')) {
+        deleteContact(c.id);
+        renderSavedContacts();
+      }
+    };
+    actions.appendChild(callC);
+    actions.appendChild(delC);
+    li.appendChild(actions);
+    list.appendChild(li);
+  });
+}
 // Solicitar lista de usuarios al conectar si es admin
 function requestUserList() {
   if (isAdmin) {
@@ -90,7 +146,41 @@ function checkAdmin() {
   adminPanel.style.display = isAdmin ? '' : 'none';
 }
 
-// Llama a checkAdmin cuando se conecte el socket
+// Inicializar lista de contactos al cargar la app
+function initContacts() {
+  renderSavedContacts();
+
+  // Mostrar formulario de guardar cuando hay un ID en el campo
+  targetIdInput.addEventListener('input', () => {
+    const saveForm = document.getElementById('saveContactForm');
+    if (saveForm) {
+      saveForm.style.display = targetIdInput.value.trim() ? '' : 'none';
+      document.getElementById('saveContactMsg').textContent = '';
+    }
+  });
+
+  // Botón guardar contacto
+  const saveContactBtn = document.getElementById('saveContactBtn');
+  if (saveContactBtn) {
+    saveContactBtn.addEventListener('click', () => {
+      const name = document.getElementById('saveContactName').value.trim();
+      const id = targetIdInput.value.trim();
+      const msgEl = document.getElementById('saveContactMsg');
+      if (!name) { msgEl.textContent = 'Escribe un nombre para el contacto.'; msgEl.style.color = '#e53935'; return; }
+      if (!id) { msgEl.textContent = 'Primero ingresa un ID en el campo de llamada.'; msgEl.style.color = '#e53935'; return; }
+      const saved = saveContact(name, id);
+      if (saved) {
+        msgEl.textContent = '✅ Contacto guardado.';
+        msgEl.style.color = '#25d366';
+        document.getElementById('saveContactName').value = '';
+        renderSavedContacts();
+      } else {
+        msgEl.textContent = 'Este ID ya está guardado como contacto.';
+        msgEl.style.color = '#e53935';
+      }
+    });
+  }
+}
 
 let localStream = null;
 let peer = null;
@@ -375,6 +465,12 @@ function cleanupPeer(){
     try { peer.destroy(); } catch(e){}
     peer = null;
   }
+  // Apagar cámara y micrófono al terminar la llamada
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
   dataChannelOpen = false;
   hangBtn.disabled = true;
   remoteVideo.srcObject = null;
