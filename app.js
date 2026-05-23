@@ -1,3 +1,27 @@
+// Solicitar permiso de notificaciones al cargar
+if ('Notification' in window && Notification.permission !== 'granted') {
+  Notification.requestPermission();
+}
+
+function showNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    navigator.serviceWorker.getRegistration().then(function(reg) {
+      if (reg) {
+        reg.showNotification(title, {
+          body: body,
+          icon: 'icon-192.png',
+          badge: 'icon-192.png',
+          sound: 'notification.mp3'
+        });
+      }
+    });
+    // Reproducir sonido localmente
+    try {
+      const audio = new Audio('notification.mp3');
+      audio.play();
+    } catch(e){}
+  }
+}
 // app.js - cliente simple para mensajería y llamadas (usa simple-peer y socket.io-client CDN)
 // Cambia la URL si tu servidor está en otra dirección
 
@@ -171,6 +195,10 @@ function addMessage(from, text, fileUrl, fileName){
   el.innerHTML = content;
   msgList.appendChild(el);
   msgList.scrollTop = msgList.scrollHeight;
+  // Notificación si el mensaje es entrante
+  if (!isOwn) {
+    showNotification('Nuevo mensaje', text || fileName || 'Tienes un nuevo mensaje');
+  }
 }
 // Envío de archivos entre contactos autorizados usando WebRTC data channel
 const fileInput = document.getElementById('fileInput');

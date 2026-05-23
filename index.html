@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Mi Chat WebRTC</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#075e54" />
+  </head>
+  <script>
+  // Registrar service worker para PWA y notificaciones
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('service-worker.js');
+    });
+  }
+  </script>
   <!-- CDN socket.io-client y simple-peer para evitar build -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
