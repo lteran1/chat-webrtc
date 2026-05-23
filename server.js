@@ -13,10 +13,28 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+
 // Usuarios en memoria (para demo, usa una base de datos real en producción)
 const users = [
   { username: 'admin', password: 'admin', isAdmin: true }
 ];
+
+// Contactos autorizados por usuario (persistencia simple en archivo)
+const fs = require('fs');
+const CONTACTS_FILE = './contacts.json';
+let authorizedContacts = {};
+function loadContacts() {
+  try {
+    const data = fs.readFileSync(CONTACTS_FILE, 'utf8');
+    authorizedContacts = JSON.parse(data).authorizedContacts || {};
+  } catch {
+    authorizedContacts = {};
+  }
+}
+function saveContacts() {
+  fs.writeFileSync(CONTACTS_FILE, JSON.stringify({ authorizedContacts }, null, 2));
+}
+loadContacts();
 
 
 // Autenticación de usuario
@@ -48,8 +66,49 @@ io.on('connection', (socket) => {
   broadcastUserList();
 
   // Señalización WebRTC
+
+  // Validar autorización antes de señalizar
   socket.on('signal', ({ to, data }) => {
-    io.to(to).emit('signal', { from: socket.id, data });
+    // Buscar usuario destino por socketId
+    const targetSocket = Array.from(io.sockets.sockets.values()).find(s => s.id === to);
+    if (!targetSocket) return;
+    const fromUser = socket.username;
+    const toUser = targetSocket.username;
+    // Solo permitir si ambos son contactos autorizados
+    if (
+      authorizedContacts[fromUser] && authorizedContacts[fromUser].includes(toUser) &&
+      authorizedContacts[toUser] && authorizedContacts[toUser].includes(fromUser)
+    ) {
+      io.to(to).emit('signal', { from: socket.id, data });
+    }
+  });
+
+  // Permitir al admin autorizar contactos
+  socket.on('admin-authorize-contact', ({ user, contact }) => {
+    if (!isAdmin(socket)) return;
+    if (!users.find(u => u.username === user) || !users.find(u => u.username === contact)) return;
+    if (!authorizedContacts[user]) authorizedContacts[user] = [];
+    if (!authorizedContacts[user].includes(contact)) {
+      authorizedContacts[user].push(contact);
+      saveContacts();
+    }
+    socket.emit('admin-authorize-contact-result', { ok: true, msg: `Contacto autorizado para ${user}` });
+  });
+
+  // Permitir al admin quitar autorización
+  socket.on('admin-remove-contact', ({ user, contact }) => {
+    if (!isAdmin(socket)) return;
+    if (authorizedContacts[user]) {
+      authorizedContacts[user] = authorizedContacts[user].filter(c => c !== contact);
+      saveContacts();
+    }
+    socket.emit('admin-remove-contact-result', { ok: true, msg: `Contacto removido de ${user}` });
+  });
+
+  // Permitir a los usuarios obtener su lista de contactos autorizados
+  socket.on('get-authorized-contacts', () => {
+    const user = socket.username;
+    socket.emit('authorized-contacts', authorizedContacts[user] || []);
   });
 
   // Crear usuario (solo admin)
@@ -98,6 +157,7 @@ io.on('connection', (socket) => {
     sendUserList();
     broadcastUserList();
   });
+
 
   // Manejo de desconexión
   socket.on('disconnect', () => {

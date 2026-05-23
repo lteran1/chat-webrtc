@@ -81,56 +81,44 @@ const createUserForm = document.getElementById('createUserForm');
 const userList = document.getElementById('userList');
 const globalUserList = document.getElementById('globalUserList');
 
-// ── Contactos guardados (localStorage) ──────────────────────────────
-function loadContacts() {
-  try { return JSON.parse(localStorage.getItem('contacts') || '[]'); } catch { return []; }
-}
-function saveContact(name, id) {
-  const contacts = loadContacts();
-  if (contacts.find(c => c.id === id)) return false;
-  contacts.push({ name, id });
-  localStorage.setItem('contacts', JSON.stringify(contacts));
-  return true;
-}
-function deleteContact(id) {
-  const contacts = loadContacts().filter(c => c.id !== id);
-  localStorage.setItem('contacts', JSON.stringify(contacts));
-}
+// ── Contactos autorizados por el administrador ────────
+let onlineUsersCache = [];
+let authorizedContacts = [];
+
 function renderSavedContacts() {
-  const contacts = loadContacts();
   const list = document.getElementById('savedContactsList');
   if (!list) return;
   list.innerHTML = '';
-  if (contacts.length === 0) {
-    list.innerHTML = '<li style="color:#6a7175;font-size:0.9rem;padding:6px 0;">Sin contactos guardados</li>';
+  if (authorizedContacts.length === 0) {
+    list.innerHTML = '<li style="color:#6a7175;font-size:0.9rem;padding:6px 0;">Sin contactos autorizados.<br><small>El administrador debe autorizar contactos.</small></li>';
     return;
   }
-  contacts.forEach(c => {
+  authorizedContacts.forEach(username => {
+    // Buscar si está online ahora mismo
+    const onlineUser = onlineUsersCache.find(u => u.username === username);
+    const isOnline = onlineUser && onlineUser.isOnline;
     const li = document.createElement('li');
     li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f7f7f7;border-radius:8px;gap:6px;margin-bottom:6px;';
-    li.innerHTML = `<span style="font-weight:600;color:#222;">${c.name}</span>`;
+    const statusDot = isOnline ? '🟢' : '⚪';
+    li.innerHTML = `<span>${statusDot} <strong style="color:#222;">${username}</strong></span>`;
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:6px;';
-    const callC = document.createElement('button');
-    callC.textContent = 'Llamar';
-    callC.style.cssText = 'background:#25d366;color:#fff;border:none;border-radius:14px;padding:3px 10px;font-weight:bold;cursor:pointer;font-size:0.85rem;';
-    callC.onclick = () => {
-      targetIdInput.value = c.id;
-      log('Llamando a ' + c.name + '...');
-      document.getElementById('callBtn').click();
-    };
-    const delC = document.createElement('button');
-    delC.textContent = '✕';
-    delC.title = 'Eliminar contacto';
-    delC.style.cssText = 'background:#e53935;color:#fff;border:none;border-radius:14px;padding:3px 8px;cursor:pointer;font-size:0.85rem;';
-    delC.onclick = () => {
-      if (confirm('¿Eliminar el contacto "' + c.name + '"?')) {
-        deleteContact(c.id);
-        renderSavedContacts();
-      }
-    };
-    actions.appendChild(callC);
-    actions.appendChild(delC);
+    if (isOnline) {
+      const callC = document.createElement('button');
+      callC.textContent = 'Llamar';
+      callC.style.cssText = 'background:#25d366;color:#fff;border:none;border-radius:14px;padding:3px 10px;font-weight:bold;cursor:pointer;font-size:0.85rem;';
+      callC.onclick = () => {
+        targetIdInput.value = onlineUser.socketId;
+        log('Llamando a ' + username + '...');
+        document.getElementById('callBtn').click();
+      };
+      actions.appendChild(callC);
+    } else {
+      const offSpan = document.createElement('span');
+      offSpan.textContent = 'Offline';
+      offSpan.style.cssText = 'color:#b0bec5;font-size:0.82rem;';
+      actions.appendChild(offSpan);
+    }
     li.appendChild(actions);
     list.appendChild(li);
   });
@@ -148,39 +136,15 @@ function checkAdmin() {
 
 // Inicializar lista de contactos al cargar la app
 function initContacts() {
-  renderSavedContacts();
-
-  // Mostrar formulario de guardar cuando hay un ID en el campo
-  targetIdInput.addEventListener('input', () => {
-    const saveForm = document.getElementById('saveContactForm');
-    if (saveForm) {
-      saveForm.style.display = targetIdInput.value.trim() ? '' : 'none';
-      document.getElementById('saveContactMsg').textContent = '';
-    }
-  });
-
-  // Botón guardar contacto
-  const saveContactBtn = document.getElementById('saveContactBtn');
-  if (saveContactBtn) {
-    saveContactBtn.addEventListener('click', () => {
-      const name = document.getElementById('saveContactName').value.trim();
-      const id = targetIdInput.value.trim();
-      const msgEl = document.getElementById('saveContactMsg');
-      if (!name) { msgEl.textContent = 'Escribe un nombre para el contacto.'; msgEl.style.color = '#e53935'; return; }
-      if (!id) { msgEl.textContent = 'Primero ingresa un ID en el campo de llamada.'; msgEl.style.color = '#e53935'; return; }
-      const saved = saveContact(name, id);
-      if (saved) {
-        msgEl.textContent = '✅ Contacto guardado.';
-        msgEl.style.color = '#25d366';
-        document.getElementById('saveContactName').value = '';
-        renderSavedContacts();
-      } else {
-        msgEl.textContent = 'Este ID ya está guardado como contacto.';
-        msgEl.style.color = '#e53935';
-      }
-    });
-  }
+  // Solicitar contactos autorizados al servidor
+  socket.emit('get-authorized-contacts');
 }
+
+// Recibir contactos autorizados del servidor
+socket.on('authorized-contacts', (contacts) => {
+  authorizedContacts = contacts;
+  renderSavedContacts();
+});
 
 let localStream = null;
 let peer = null;
@@ -195,14 +159,76 @@ function log(text){
   logArea.scrollTop = logArea.scrollHeight;
 }
 
-function addMessage(from, text){
+function addMessage(from, text, fileUrl, fileName){
   const el = document.createElement('div');
-  // Si el mensaje es propio, usa clase 'out', si es remoto, 'in'
   const isOwn = from === 'Tú' || from === myId;
   el.className = 'msg ' + (isOwn ? 'out' : 'in');
-  el.innerHTML = `<div class="from">${isOwn ? 'Tú' : from}</div><div class="text">${text}</div>`;
+  let content = `<div class="from">${isOwn ? 'Tú' : from}</div><div class="text">${text || ''}`;
+  if (fileUrl && fileName) {
+    content += `<br><a href="${fileUrl}" download="${fileName}" target="_blank">📎 ${fileName}</a>`;
+  }
+  content += '</div>';
+  el.innerHTML = content;
   msgList.appendChild(el);
   msgList.scrollTop = msgList.scrollHeight;
+}
+// Envío de archivos entre contactos autorizados usando WebRTC data channel
+const fileInput = document.getElementById('fileInput');
+if (fileInput) {
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!peer || !dataChannelOpen) {
+      log('Debes iniciar una llamada para enviar archivos.');
+      return;
+    }
+    // Leer archivo como ArrayBuffer y enviar por data channel
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      const buffer = evt.target.result;
+      // Enviar metadatos primero
+      peer.send(JSON.stringify({ fileName: file.name, fileSize: file.size, fileType: file.type, isFile: true }));
+      // Enviar archivo en partes si es grande
+      const chunkSize = 16 * 1024;
+      for (let i = 0; i < buffer.byteLength; i += chunkSize) {
+        peer.send(buffer.slice(i, i + chunkSize));
+      }
+      peer.send('FILE_END');
+      log('Archivo enviado: ' + file.name);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Recepción de archivos por data channel
+let incomingFile = null;
+let incomingFileBuffer = [];
+if (typeof window !== 'undefined') {
+  window.handleDataChannelMessage = function(data) {
+    if (typeof data === 'string') {
+      try {
+        const meta = JSON.parse(data);
+        if (meta.isFile) {
+          incomingFile = { name: meta.fileName, size: meta.fileSize, type: meta.fileType };
+          incomingFileBuffer = [];
+          return;
+        }
+      } catch {}
+      if (data === 'FILE_END' && incomingFile) {
+        // Unir partes y crear enlace de descarga
+        const blob = new Blob(incomingFileBuffer, { type: incomingFile.type });
+        const url = URL.createObjectURL(blob);
+        addMessage('Contacto', '', url, incomingFile.name);
+        incomingFile = null;
+        incomingFileBuffer = [];
+        return;
+      }
+    }
+    // Si es parte de archivo
+    if (incomingFile) {
+      incomingFileBuffer.push(data);
+    }
+  };
 }
 
 // Socket events
@@ -212,6 +238,15 @@ socket.on('connect', () => {
   log('Conectado al servidor de señalización');
   checkAdmin();
   requestUserList();
+  // Parchear data channel para archivos
+  if (peer && peer._channel) {
+    peer._channel.onmessage = (e) => {
+      const data = e.data;
+      if (typeof window.handleDataChannelMessage === 'function') {
+        window.handleDataChannelMessage(data);
+      }
+    };
+  }
 });
 // Recibe y muestra la lista de usuarios
 socket.on('admin-user-list', (users) => {
@@ -247,63 +282,43 @@ socket.on('admin-user-list', (users) => {
 
 // Recibe y muestra la lista global de usuarios y sus estados (para todos)
 socket.on('user-list-update', (allUsers) => {
+  onlineUsersCache = allUsers;
+  renderSavedContacts();
+
   if (!globalUserList) return;
   globalUserList.innerHTML = '';
 
   allUsers.forEach(u => {
-    const li = document.createElement('li');
-    li.style.display = 'flex';
-    li.style.alignItems = 'center';
-    li.style.justifyContent = 'space-between';
-    li.style.padding = '8px 12px';
-    li.style.background = '#f7f7f7';
-    li.style.borderRadius = '8px';
-    li.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-    li.style.color = '#333';
+    if (u.username === currentUser) return;
 
-    // Indicador de estado (online/offline)
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f7f7f7;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);color:#333;';
+
     const statusDot = u.isOnline ? '🟢' : '⚪';
-    const statusText = u.isOnline ? 'En línea' : 'Desconectado';
-    
-    // Nombre de usuario e info
     const infoSpan = document.createElement('span');
-    infoSpan.innerHTML = `${statusDot} <strong style="margin-left: 6px;">${u.username}</strong> ${u.isAdmin ? ' <small style="color:#075e54; font-weight:bold;">(admin)</small>' : ''}`;
-    infoSpan.title = statusText;
+    infoSpan.innerHTML = `${statusDot} <strong style="margin-left:5px;">${u.username}</strong>${u.isAdmin ? ' <small style="color:#075e54;font-weight:bold;">(admin)</small>' : ''}`;
+    infoSpan.title = u.isOnline ? 'En línea' : 'Desconectado';
     li.appendChild(infoSpan);
 
-    // Botón de acción (Llamar) si está conectado y no es el propio usuario
-    if (u.isOnline && u.username !== currentUser) {
-      const callBtn = document.createElement('button');
-      callBtn.textContent = 'Llamar';
-      callBtn.style.background = '#25d366';
-      callBtn.style.color = '#fff';
-      callBtn.style.border = 'none';
-      callBtn.style.borderRadius = '16px';
-      callBtn.style.padding = '4px 12px';
-      callBtn.style.cursor = 'pointer';
-      callBtn.style.fontWeight = 'bold';
-      
-      callBtn.onclick = () => {
-        targetIdInput.value = u.socketId;
-        log(`Iniciando llamada directa a ${u.username}...`);
-        document.getElementById('callBtn').click();
-      };
-      li.appendChild(callBtn);
-    } else if (u.username === currentUser) {
-      const selfSpan = document.createElement('span');
-      selfSpan.textContent = 'Tú';
-      selfSpan.style.color = '#6a7175';
-      selfSpan.style.fontSize = '0.85rem';
-      selfSpan.style.fontWeight = 'bold';
-      li.appendChild(selfSpan);
-    } else {
-      const offlineSpan = document.createElement('span');
-      offlineSpan.textContent = 'Offline';
-      offlineSpan.style.color = '#b0bec5';
-      offlineSpan.style.fontSize = '0.85rem';
-      li.appendChild(offlineSpan);
+    // Si es admin, mostrar controles para autorizar contactos
+    if (isAdmin) {
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      // Autorizar contacto para cualquier usuario (menos admin)
+      allUsers.forEach(target => {
+        if (!target.isAdmin && target.username !== u.username) {
+          const authBtn = document.createElement('button');
+          authBtn.textContent = `Autorizar ${target.username}↔${u.username}`;
+          authBtn.style.cssText = 'background:#075e54;color:#fff;border:none;border-radius:14px;padding:2px 8px;font-size:0.75rem;cursor:pointer;';
+          authBtn.onclick = () => {
+            socket.emit('admin-authorize-contact', { user: target.username, contact: u.username });
+            log(`Autorizando a ${target.username} para contactar con ${u.username}`);
+          };
+          actions.appendChild(authBtn);
+        }
+      });
+      li.appendChild(actions);
     }
-
     globalUserList.appendChild(li);
   });
 });
