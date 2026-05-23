@@ -85,14 +85,22 @@ io.on('connection', (socket) => {
 
   // Permitir al admin autorizar contactos
   socket.on('admin-authorize-contact', ({ user, contact }) => {
-    if (!isAdmin(socket)) return;
+    if (!isAdmin(socket) && socket.username !== user) return;
     if (!users.find(u => u.username === user) || !users.find(u => u.username === contact)) return;
+    // Autorizar ambos sentidos
     if (!authorizedContacts[user]) authorizedContacts[user] = [];
+    if (!authorizedContacts[contact]) authorizedContacts[contact] = [];
+    let changed = false;
     if (!authorizedContacts[user].includes(contact)) {
       authorizedContacts[user].push(contact);
-      saveContacts();
+      changed = true;
     }
-    socket.emit('admin-authorize-contact-result', { ok: true, msg: `Contacto autorizado para ${user}` });
+    if (!authorizedContacts[contact].includes(user)) {
+      authorizedContacts[contact].push(user);
+      changed = true;
+    }
+    if (changed) saveContacts();
+    socket.emit('admin-authorize-contact-result', { ok: true, msg: `Contacto autorizado entre ${user} y ${contact}` });
   });
 
   // Permitir al admin quitar autorización
