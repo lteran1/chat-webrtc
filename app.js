@@ -78,6 +78,15 @@ loginForm.addEventListener('submit', function(e) {
     showApp();
     checkAdmin();
     requestUserList();
+    // Importar contactos locales automáticamente si existen
+    try {
+      const localContacts = JSON.parse(localStorage.getItem('contacts_v2') || '[]');
+      if (Array.isArray(localContacts) && localContacts.length > 0) {
+        localContacts.forEach(contact => {
+          socket.emit('admin-authorize-contact', { user: username, contact });
+        });
+      }
+    } catch {}
     initContacts();
     loginForm.reset();
   });
